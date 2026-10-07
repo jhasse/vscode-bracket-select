@@ -17,3 +17,6 @@
 ## [2.1.0]
 - Remove undo (use `ctrl+u` instead)
 - Set extensionKind to "ui", so that it runs locally even when using the remote extension
+
+## [Unreleased]
+- Support selecting the content of fenced code blocks (```` ``` ```` and `~~~`)

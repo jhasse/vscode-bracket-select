@@ -1,6 +1,6 @@
 # Bracket Select
 This is a simple plugin that support to quick select text between matched brackets.
-This plugin supports `()`, `{}`, `[]`,`""`, `''`, and ``` `` ```, and can not be customized.  Unfortunally angle brackets `<>` are not supported due to RegEx being confused with math (`l < 1`).
+This plugin supports `()`, `{}`, `[]`,`""`, `''`, and ``` `` ```, and can not be customized. Inside Markdown fenced code blocks (```` ``` ```` or `~~~`) it selects the content of the block, and on the next press the whole block including the fences.  Unfortunally angle brackets `<>` are not supported due to RegEx being confused with math (`l < 1`).
 Really hope this plugin can help you!
 
 

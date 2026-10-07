@@ -3,6 +3,7 @@
 // Import the module and reference it with the alias vscode in your code below
 import * as vscode from 'vscode';
 import { bracketUtil } from './bracketUtil';
+import { fenceUtil } from './fenceUtil';
 
 class SearchResult {
     bracket: string;
@@ -100,29 +101,80 @@ function expandSelection(includeBrack: boolean) {
 }
 
 function selectText(includeBrack: boolean, selection: vscode.Selection): { start: number, end: number } | void {
-    const searchContext = getSearchContext(selection);
-    let { text, backwardStarter, forwardStarter } = searchContext;
+    const fenced = selectInFencedBlock(includeBrack, selection);
+    if (fenced) {
+        return fenced;
+    }
+
+    const { text, backwardStarter, forwardStarter } = getSearchContext(selection);
+    if (backwardStarter < 0 || forwardStarter >= text.length) {
+        return;
+    }
+    const pair = findBracketPair(includeBrack, text, backwardStarter, forwardStarter);
+    if (!pair) {
+        showInfo('No matched bracket pairs found')
+    }
+    return pair;
+}
+
+// If the selection is inside a fenced code block (``` or ~~~), search for brackets only within
+// its content and fall back to selecting the content. If the content is already selected, select
+// the whole block including the fences.
+function selectInFencedBlock(includeBrack: boolean, selection: vscode.Selection): { start: number, end: number } | undefined {
+    const document = vscode.window.activeTextEditor.document;
+    const lines = document.getText().split(/\r?\n/);
+    let endLine = selection.end.line;
+    if (selection.end.character == 0 && endLine > selection.start.line) {
+        endLine--; // whole lines are selected
+    }
+    const block = fenceUtil.findBlock(lines, selection.start.line, endLine);
+    if (!block) {
+        return;
+    }
+
+    const content = new vscode.Range(block.openLine + 1, 0, block.closeLine - 1, lines[block.closeLine - 1].length);
+    const whole = new vscode.Range(block.openLine, 0, block.closeLine, lines[block.closeLine].length);
+    if (!selection.contains(content)) {
+        const contentStart = document.offsetAt(content.start);
+        try {
+            const pair = findBracketPair(includeBrack, document.getText(content),
+                document.offsetAt(selection.start) - contentStart - 1,
+                document.offsetAt(selection.end) - contentStart);
+            if (pair) {
+                return { start: pair.start + contentStart, end: pair.end + contentStart };
+            }
+        } catch (e) {
+            // unmatched brackets inside the block, select the block instead
+        }
+    }
+    const range = includeBrack || selection.contains(content) ? whole : content;
+    return {
+        start: document.offsetAt(range.start) - 1, //convert to text index like the bracket search does
+        end: document.offsetAt(range.end),
+    };
+}
+
+function findBracketPair(includeBrack: boolean, text: string, backwardStarter: number, forwardStarter: number): { start: number, end: number } | undefined {
     if (backwardStarter < 0 || forwardStarter >= text.length) {
         return;
     }
 
     let selectionStart: number, selectionEnd: number;
-    var backwardResult = findBackward(searchContext.text, searchContext.backwardStarter);
-    var forwardResult = findForward(searchContext.text, searchContext.forwardStarter);
+    var backwardResult = findBackward(text, backwardStarter);
+    var forwardResult = findForward(text, forwardStarter);
 
     while (forwardResult != null
         && !isMatch(backwardResult, forwardResult)
         && bracketUtil.isQuoteBracket(forwardResult.bracket)) {
-        forwardResult = findForward(searchContext.text, forwardResult.offset + 1);
+        forwardResult = findForward(text, forwardResult.offset + 1);
     }
     while (backwardResult != null
         && !isMatch(backwardResult, forwardResult)
         && bracketUtil.isQuoteBracket(backwardResult.bracket)) {
-        backwardResult = findBackward(searchContext.text, backwardResult.offset - 1);
+        backwardResult = findBackward(text, backwardResult.offset - 1);
     }
 
     if (!isMatch(backwardResult, forwardResult)) {
-        showInfo('No matched bracket pairs found')
         return;
     }
     // we are next to a bracket
@@ -144,7 +196,6 @@ function selectText(includeBrack: boolean, selection: vscode.Selection): { start
         end: selectionEnd,
     }
 }
-
 
 //Main extension point
 export function activate(context: vscode.ExtensionContext) {
